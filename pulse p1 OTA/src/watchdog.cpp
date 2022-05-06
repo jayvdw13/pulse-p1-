@@ -1,8 +1,13 @@
-#include "SPIFFS.h"
+/*#include "SPIFFS.h"
 #include "Update.h"  
 void UpdateSpiffs() {
    Serial.begin(115200);
   
+  if(WiFi.status()== WL_CONNECTED){
+    
+
+
+
    if(!SPIFFS.begin(true)){
         Serial.println("An Error has occurred while mounting SPIFFS");
         return;
@@ -44,3 +49,4 @@ void UpdateSpiffs() {
  
     ESP.restart();
 }
+*/

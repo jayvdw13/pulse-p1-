@@ -5,7 +5,7 @@
 
 extern float version;
 
-extern uint32_t chipId;
+extern uint32_t chipId; 
 extern String chipId2;
 extern int i;
 
@@ -25,6 +25,13 @@ extern volatile unsigned long count4;
 extern volatile unsigned long countgas;
 extern volatile unsigned long countwater;
 
+extern void pulse1();
+extern void pulse2();
+extern void pulse3();
+extern void pulse4();
+extern void pulsegas();
+extern void pulsewater();
+
 extern String payload;
 extern String payload2;
 extern String payload3;
@@ -34,13 +41,11 @@ extern String payloadwater;
 extern String update_settings;
 extern String payload6;
 
-extern unsigned long lastTime1;  
-extern unsigned long lastTime2; 
-extern unsigned long lastTime3; 
-extern unsigned long lastTime4; 
-extern unsigned long lastTime5; 
-extern unsigned long lastTime6; 
+extern unsigned long lastTime;  
 extern unsigned long timerDelay;
+
+extern char input; // inkomende seriele data (byte)
+extern  int messageCount;
 
 String readFile(fs::FS &fs, const char * path){
   Serial.printf("Reading file: %s\r\n", path);
@@ -90,7 +95,7 @@ void get_auto_update(){
   // Send HTTP GET request
   int httpResponseCode4 = http.GET();
   if (httpResponseCode4>0) {
-    payload6 = http.getString();
+    payload6 = http.getString(); 
     Serial.println(payload6);
   }
   http.end();
@@ -127,6 +132,7 @@ void updateFirmware(uint8_t *data, size_t len){
   Update.end(true);
   Serial.printf("\nUpdate Success, Total Size: %u\nRebooting...\n", currentLength);
   
+  
   // ----------------------------------------------------------------
   // Restart ESP32 to see changes 
   ESP.restart();
@@ -134,6 +140,11 @@ void updateFirmware(uint8_t *data, size_t len){
 
 
 void OTA(){
+  //Restarts ESP32 when wifi connection cant be established 
+  if(WiFi.status()== WL_DISCONNECTED && ((millis() - lastTimeOTA) > timerDelayOTA)){
+    ESP.restart();
+  }
+
   // ----------------------------------------------------------------
   // If statement for second timer
   if ((millis() - lastTimeOTA) > timerDelayOTA) {
@@ -225,7 +236,6 @@ void OTA(){
             }
             delay(1);
           }
-
         }
       }
       else {

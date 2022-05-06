@@ -1,32 +1,21 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <HTTPClient.H>
-#include <Arduino.h>
-#include <stdio.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/portmacro.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#include "driver/periph_ctrl.h"
-#include "driver/ledc.h"
-#include "driver/gpio.h"
-#include "driver/pcnt.h"
-#include "esp_attr.h"
-#include "esp_log.h"
 #include "WiFiManager.H"
+#include <HTTPClient.H>
 #include "ESPAsyncWebServer.h"
 #include <AsyncTCP.h>
 #include <SPIFFS.h>
 #include <index.h>
+#include <EEPROM.h>
 
-float version = 1.8;
+float version = 1.9;
 
 extern uint32_t chipId;
 extern String chipId2;
 extern int i;
 
 extern String serverName;
-extern String serverName2;
+
 
 // WiFiManager
 // Local intialization. Once its business is done, there is no need to keep it around
@@ -50,15 +39,12 @@ extern unsigned long prior_countgas;
 extern volatile unsigned long countwater;
 extern unsigned long prior_countwater;
 
-extern String payload;
-extern String payload2;
-extern String payload3;
-extern String payload4;
-extern String payloadgas;
-extern String payloadwater;
+extern String payloadpulse;
 
 extern unsigned long lastTime;
 extern unsigned long timerDelay;
+extern unsigned long lastTimeOTA;  
+extern unsigned long timerDelayOTA;
 
 // function to increment the meters value by 1.
 void pulse1(){
@@ -122,42 +108,24 @@ void setup()                                                                    
                     1,           /* priority of the task */                                                                             //!
                     &Task1,      /* Task handle to keep track of created task */                                                        //!
                     0);          /* pin task to core 0 */                                                                               //!
-  //---------------------------------------------------------------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------------------------------------------------------------------
   
-  String ssid = "FlexGreen-Counter";
+  EEPROM.begin(512);
+  
   // fetches ssid and pass from eeprom and tries to connect.
   // if it does not connect it starts an access point with the specified name,
-  // here  "AutoConnectAP",
+  // here  "FlexGreen-Counter",
   // and goes into a blocking loop awaiting configuration.
   wifiManager.autoConnect("FlexGreen-Counter", "FlexGreen");
+
 
   // Send web page with input fields to client
   server2.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
   request->send_P(200, "text/html", index_html);
-  });
+  }); 
 
   server2.on("/count1", HTTP_GET, [](AsyncWebServerRequest *request){
-  request->send_P(200, "text/plain", payload.c_str());
-  }); 
-
-  server2.on("/count2", HTTP_GET, [](AsyncWebServerRequest *request){
-  request->send_P(200, "text/plain", payload2.c_str());
-  });
-
-  server2.on("/count3", HTTP_GET, [](AsyncWebServerRequest *request){
-  request->send_P(200, "text/plain", payload3.c_str());
-  }); 
-
-  server2.on("/count4", HTTP_GET, [](AsyncWebServerRequest *request){
-  request->send_P(200, "text/plain", payload4.c_str());
-  });
-
-  server2.on("/countgas", HTTP_GET, [](AsyncWebServerRequest *request){
-  request->send_P(200, "text/plain", payloadgas.c_str());
-  }); 
-
-  server2.on("/countwater", HTTP_GET, [](AsyncWebServerRequest *request){
-  request->send_P(200, "text/plain", payloadwater.c_str());
+  request->send_P(200, "text/plain", payloadpulse.c_str());
   }); 
 
   // Start server
@@ -182,262 +150,65 @@ void setup()                                                                    
   attachInterrupt(digitalPinToInterrupt(5), pulsewater, RISING); 
 }
 
+byte guifactor1 = 5;
+byte guifactor2 = 2;
+byte guifactor3 = 2;
+byte guifactor4 = 2;
+byte guifactorgas;
+byte guifactorwater;
+
+byte count1factor;
+byte count2factor;
+byte count3factor;
+byte count4factor;
+byte countgasfactor;
+byte countwaterfactor;
 
 
 //--------------------------------------------------------------------
 void loop()
 {
-  unsigned long new_count1 = count1;
-  if (new_count1 < 1200){
-  // keeps track of the amount of pulses of pulse meter one (on pin 22)
-  if (new_count1 != prior_count1) {
-     Serial.println(new_count1);
-     prior_count1 = new_count1;
+  if (guifactor1 > 0){
+    EEPROM.write(1, guifactor1);
+    EEPROM.commit();
   } 
-  // sends an update to the web every 1000 pulses.
-  if (new_count1 > 0 && ((millis() - lastTime) > timerDelay))  {
-    Serial.println(count1);
-    Serial.println("Counter 1");
-    count1 = 0;
-  {   
-      // checks if wifi is connected.
-      if(WiFi.status()== WL_CONNECTED){
-        HTTPClient http;
-        // preparation HTTP GET request.
-         String serverPath = serverName + "?chip_id=" + chipId + "&id1_name=pulse1&count1=" + new_count1;
-        // Your Domain name with URL path or IP address with path.
-        http.begin(serverPath.c_str());
-        // Send HTTP GET request.
-        int httpResponseCode = http.GET();
-        // confirms the arrival of a response from the server or sends an error.
-        if (httpResponseCode>0) {
-          payload = http.getString();
-          Serial.println(payload2);
-         }
-         else {
-          Serial.print("Error code: ");
-          Serial.println(httpResponseCode);
-         }
-        // closes the HTTP connection.
-        http.end();
-      }
-      else {
-       Serial.println("WiFi Disconnected");
-        }  
-      }
-    }
-  }
 
-  // keeps track of the amount of pulses of pulse meter two (on pin 19)
-  unsigned long new_count2 = count2;
-  if (new_count2 < 1200){
-  if (new_count2 != prior_count2) {
-     Serial.println(new_count2);
-     prior_count2 = new_count2;
-  }
-  // sends an update to the web every 1000 pulses.
-  if (new_count2 > 0 && ((millis() - lastTime) > timerDelay))  {
-    Serial.println(count2);
-    Serial.println("Counter 2");
-    count2 = 0;
-  {   
-      // checks if wifi is connected.
-      if(WiFi.status()== WL_CONNECTED){
-        HTTPClient http;
-        // preparation HTTP GET request.
-         String serverPath = serverName + "?chip_id=" + chipId + "&id2_name=pulse2&count2=" + new_count2;
-        // Your Domain name with URL path or IP address with path.
-        http.begin(serverPath.c_str());
-        // Send HTTP GET request.
-        int httpResponseCode = http.GET();
-        // confirms the arrival of a response from the server or sends an error.
-        if (httpResponseCode>0) {
-          payload2 = http.getString();
-          Serial.println(payload2);
-         }
-         else {
-          Serial.print("Error code: ");
-          Serial.println(httpResponseCode);
-         }
-        // closes the HTTP connection.
-        http.end();
-      }
-      else {
-       Serial.println("WiFi Disconnected");
-        }  
-      }
-    }
-  }
+  count1factor = EEPROM.read(1);
+
+  if (guifactor2 > 0){
+    EEPROM.write(1, guifactor2);
+    EEPROM.commit();
+  } 
   
-  // keeps track of the amount of pulses of pulse meter one (on pin 22)
-  unsigned long new_count3 = count3;
-  if (new_count3 < 1200){
-  if (new_count3 != prior_count3) {
-     Serial.println(new_count3);
-     prior_count3 = new_count3;
-  }
-      // sends an update to the web every 1000 pulses.
-  if (new_count3 > 0 && ((millis() - lastTime) > timerDelay))  {
-    Serial.println(count3);
-    Serial.println("Counter 3");
-    count3 = 0;  
-  {  
-      // checks if wifi is connected.
-      if(WiFi.status()== WL_CONNECTED){
-        HTTPClient http;
-        // preparation HTTP GET request.
-         String serverPath = serverName + "?chip_id=" + chipId + "&id3_name=pulse3&count3=" + new_count3;
-        // Your Domain name with URL path or IP address with path.
-        http.begin(serverPath.c_str());
-        // Send HTTP GET request.
-        int httpResponseCode = http.GET();
-        // confirms the arrival of a response from the server or sends an error.
-        if (httpResponseCode>0) {
-          payload3 = http.getString();
-          Serial.println(payload3);
-        }
-        else {
-          Serial.print("Error code: ");
-          Serial.println(httpResponseCode);
-        }
-        // closes the HTTP connection.
-        http.end();
-      }
-      else {
-       Serial.println("WiFi Disconnected");
-        } 
-      }
-    }
-  }
+  count2factor = EEPROM.read(26);
 
-  // keeps track of the amount of pulses of pulse meter one (on pin 22)
-  unsigned long new_count4 = count4;
-  if (new_count4 < 1200){
-  if (new_count4 != prior_count4) {
-     Serial.println(new_count4);
-     prior_count4 = new_count4;
-  }
-    // sends an update to the web every 1000 pulses.
-  if (new_count4 > 0 && ((millis() - lastTime) > timerDelay))  {
-    Serial.println(count4);
-    Serial.println("Counter 4");
-    count4 = 0;  
-  {  
-      // checks if wifi is connected.
-      if(WiFi.status()== WL_CONNECTED){
-        HTTPClient http;
-        // preparation HTTP GET request.
-         String serverPath = serverName + "?chip_id=" + chipId + "&id4_name=pulse4&count4=" + new_count4;
-        // Your Domain name with URL path or IP address with path.
-        http.begin(serverPath.c_str());
-        // Send HTTP GET request.
-        int httpResponseCode = http.GET();
-        // confirms the arrival of a response from the server or sends an error.
-        if (httpResponseCode>0) {
-          payload4 = http.getString();
-          Serial.println(payload4);
-         }
-         else {
-          Serial.print("Error code: ");
-          Serial.println(httpResponseCode);
-         }
-        // closes the HTTP connection.
-        http.end();
-      }
-      else {
-       Serial.println("WiFi Disconnected");
-        }
-      }
-    }
-  }
+  if (guifactor3 > 0){
+    EEPROM.write(1, guifactor3);
+    EEPROM.commit();
+  } 
 
-  unsigned long new_countgas = countgas;
-  if (new_countgas < 1200){
-  if (new_countgas != prior_countgas) {
-     Serial.println(new_countgas);
-     prior_countgas = new_countgas;
-  }
-    
-    // sends an update to the web every 1000 pulses.
-      // sends an update to the web every 1000 pulses.
-  if (new_countgas > 0 && ((millis() - lastTime) > timerDelay))  {
-    Serial.println(countgas);
-    Serial.println("Counter gas");
-    countgas = 0;  
-  {  
-      // checks if wifi is connected.
-      if(WiFi.status()== WL_CONNECTED){
-        HTTPClient http;
-        // preparation HTTP GET request.
-         String serverPath = serverName + "?chip_id=" + chipId + "&id1_name=pulsegas&countgas=" + new_countgas;
-        // Your Domain name with URL path or IP address with path.
-        http.begin(serverPath.c_str());
-        // Send HTTP GET request.
-        int httpResponseCode = http.GET();
-        // confirms the arrival of a response from the server or sends an error.
-        if (httpResponseCode>0) {
-          payloadgas = http.getString();
-          Serial.println(payloadgas);
-         }
-         else {
-          Serial.print("Error code: ");
-          Serial.println(httpResponseCode);
-         }
-        // closes the HTTP connection.
-        http.end();
-      }
-      else {
-       Serial.println("WiFi Disconnected");
-        } 
-      }
-    }
-  }
+  count3factor = EEPROM.read(27);
 
-  unsigned long new_countwater = countwater;
-  if (new_countwater < 1200){
-  if (new_countwater != prior_countwater) {
-     Serial.println(new_countwater);
-     prior_countwater = new_countwater;
-  }
-                                                                                             
-    // sends an update to the web every 1000 pulses.
-  if (new_countwater > 0 && ((millis() - lastTime) > timerDelay))  {
-    Serial.println(countwater);
-    Serial.println("Counter water");
-    countwater = 0;  
-  {  
-      // checks if wifi is connected.
-      if(WiFi.status()== WL_CONNECTED){
-        HTTPClient http;
-        // preparation HTTP GET request.
-         String serverPath = serverName + "?chip_id=" + chipId + "&id1_name=pulsewater&countwater=" + new_countwater;
-        // Your Domain name with URL path or IP address with path.
-        http.begin(serverPath.c_str());
-        // Send HTTP GET request.
-        int httpResponseCode = http.GET();
-        // confirms the arrival of a response from the server or sends an error.
-        if (httpResponseCode>0) {
-          payloadwater = http.getString();
-          Serial.println(payloadwater);
-         }
-         else {
-          Serial.print("Error code: ");
-          Serial.println(httpResponseCode);
-         }
-        // closes the HTTP connection.
-        http.end();
-      }
-      else {
-       Serial.println("WiFi Disconnected");
-        }
-      }
-    }
-  }
+  if (guifactor4 > 0){
+    EEPROM.write(1, guifactor4);
+    EEPROM.commit();
+  } 
 
-  //reset timer when done sending data
-  if (((millis() - lastTime) > timerDelay))  {
-    lastTime = millis();
-  }
+  count4factor = EEPROM.read(28);
+
+  if (guifactorgas > 0){
+    EEPROM.write(1, guifactorgas);
+    EEPROM.commit();
+  } 
+
+  countgasfactor = EEPROM.read(29);
+
+  if (guifactor1 > 0){
+    EEPROM.write(1, guifactorwater);
+    EEPROM.commit();
+  } 
+
+  countwaterfactor = EEPROM.read(30);
 
   for(i=0; i<17; i=i+8) {
     chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
@@ -463,7 +234,7 @@ void loop()
  
     if (input == '\n') 
     {
-      
+  
       if (sscanf(buffer,"1-0:1.8.1(%ld.%ld%*s" , &tl, &tld)) 
       {
         mEVLT = tl * 1000 + tld;
@@ -557,43 +328,100 @@ void loop()
       buffer[i] = 0;
     bufpos = 0;
     }
-      // look for an "!" which always indicates the end of a telegram from the p1 meter.
-      if(input == '!')
+  }
+  unsigned long new_count1 = count1 * count1factor;
+  unsigned long new_count2 = count2 * count2factor;
+  unsigned long new_count3 = count3 * count3factor;
+  unsigned long new_count4 = count4 * count4factor;
+  unsigned long new_countgas = countgas * countgasfactor;
+  unsigned long new_countwater = countwater * countwaterfactor;
+ if(input == '!')
     {
-      messageCount++;
-      if(messageCount == 6){
-      // looks if the wifi is connected.
+      messageCount++;}
+
+  // keeps track of the amount of pulses of pulse meter one (on pin 22)
+  if (new_count1 != prior_count1 ||
+   new_count2 != prior_count2 ||
+    new_count3 != prior_count3 ||
+     new_count4 != prior_count4 ||
+      new_countgas != prior_countgas ||
+       new_countwater != prior_countwater) {
+     Serial.println(new_count1);
+     Serial.println(new_count2);
+     Serial.println(new_count3);
+     Serial.println(new_count4);
+     Serial.println(new_countgas);
+     Serial.println(new_countwater);
+     prior_count1 = new_count1;
+     prior_count2 = new_count2;
+     prior_count3 = new_count3;
+     prior_count4 = new_count4;
+     prior_countgas = new_countgas;
+     prior_countwater = new_countwater;
+  } 
+  // sends an update to the web
+  if (messageCount == 6 ||
+  new_count1 > 0 && ((millis() - lastTime) > timerDelay) ||
+   new_count2 > 0 && ((millis() - lastTime) > timerDelay) ||
+    new_count3 > 0 && ((millis() - lastTime) > timerDelay) ||
+     new_count4 > 0 && ((millis() - lastTime) > timerDelay) ||
+      new_countgas > 0 && ((millis() - lastTime) > timerDelay) ||
+       new_countwater > 0 && ((millis() - lastTime) > timerDelay)){
+  {   
+      // checks if wifi is connected.
       if(WiFi.status()== WL_CONNECTED){
-            HTTPClient http;
-            // serial print to confirm the connection.
-          Serial.println("P1 Poort");
-          // preparation HTTP GET request.
-        String serverPath = serverName2 + "?chip_id=" + chipId2 + " &mEVLT=" + mEVLTData + " &mEVHT=" + mEVHTData + "&mETLT=" + mETLTData + "&mETHT=" + mETHTData + "&mEAV=" + mEAVData + "&mEAT=" + mEATData + "&mG=" + mGData;
-         // Your Domain name with URL path or IP address with path.
-       http.begin(serverPath.c_str());
-
-       // Send HTTP GET request.
-       int httpResponseCode = http.GET();
-
-       // confirms the arrival of a response from the server or sends an error.
-       if (httpResponseCode>0) {
-         Serial.print("HTTP Response code: ");
-         Serial.println(httpResponseCode);
-         String payloadP1 = http.getString();
-         Serial.println(payloadP1);
-       }
-       else {
-         Serial.print("Error code: ");
-         Serial.println(httpResponseCode);
-       }
-       // close the http connection.
-       http.end();
-     }
-     else {
-       Serial.println("WiFi Disconnected");
-     } 
-     messageCount = 0;
+        HTTPClient http;
+        // preparation HTTP GET request.
+         String serverPath = serverName + "?chip_id=" + chipId + "&count1=" + new_count1 + "&count2=" + new_count2 + "&count3=" +
+         new_count3 + "&count4=" + new_count4 + "&countgas=" + new_countgas + "&countwater=" + new_countwater + "&mEVLT=" + mEVLTData + 
+         "&mEVHT=" + mEVHTData + "&mETLT=" + mETLTData + "&mETHT=" + mETHTData + "&mEAV=" + mEAVData + "&mEAT=" + mEATData + "&mG=" + mGData;
+        // Your Domain name with URL path or IP address  with path.
+        http.begin(serverPath.c_str());
+        // Send HTTP GET request.
+        int httpResponseCode = http.GET();
+        // confirms the arrival of a response from the server or sends an error.
+        if (httpResponseCode>0) {
+          payloadpulse = http.getString();
+          Serial.println(payloadpulse);
+          count1 = 0;
+          count2 = 0;
+          count3 = 0;
+          count4 = 0;
+          countgas = 0;
+          countwater = 0;
+         }
+         else {
+          Serial.print("Error code: ");
+          Serial.println(httpResponseCode);
+         }
+        // closes the HTTP connection.
+        http.end();
       }
+      else {
+       Serial.println("WiFi Disconnected");
+      }  
+      messageCount = 0;
     }
   }
+  
+  //reset timer when done sending data
+  if (((millis() - lastTime) > timerDelay))  {
+    lastTime = millis();
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 }

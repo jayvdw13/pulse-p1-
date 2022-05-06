@@ -3,9 +3,8 @@
 uint32_t chipId = 0;
 String chipId2 = "";
 int i;
-
-String serverName = "http://flexgreen.eu/pulse/pulse_register";
-String serverName2 = "http://flexgreen.eu/p1/p1_register";
+ 
+String serverName = "http://flexgreen.eu/pulse/pulsep1_register";
 String update = "http://157.245.68.207/esp/update";
 String get_update_settings = "http://flexgreen.eu/esp/esp_settings";
 
@@ -17,7 +16,7 @@ unsigned long prior_count2=0;
 
 volatile unsigned long count3=0;
 unsigned long prior_count3=0;
-
+ 
 volatile unsigned long count4=0;
 unsigned long prior_count4=0;
 
@@ -28,14 +27,9 @@ volatile unsigned long countwater=0;
 unsigned long prior_countwater=0;
 
 unsigned long lastTimeOTA = 0;  
-unsigned long timerDelayOTA = 100000;
+unsigned long timerDelayOTA = 40000;
 
-String payload = "0";
-String payload2 = "0";
-String payload3 = "0";
-String payload4 = "0";
-String payloadgas = "0";
-String payloadwater = "0";
+String payloadpulse = "0";
 String update_settings;
 String payload6;
 
